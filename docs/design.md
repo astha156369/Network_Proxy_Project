@@ -378,6 +378,4 @@ This ensures the OS sends a proper FIN packet and flushes buffered data before c
 7. **Add Health Checks**: Admin endpoint to verify proxy is responsive
 8. **Consider IOCP Migration**: For high-scale deployments (>1000 concurrent connections)
 
----
 
-**Last Updated**: Based on codebase analysis as of current implementation.
