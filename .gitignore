@@ -1,2 +1,15 @@
+# binaries
 *.exe
-logs/
+*.o
+*.obj
+
+# logs except required samples
+out*.txt
+
+# OS / editor
+.vscode/
+*.swp
+.DS_Store
+
+# build artifacts
+build/

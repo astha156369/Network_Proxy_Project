@@ -1,0 +1,16 @@
+# Blocked Domains Configuration
+# Standard domains for testing 403 Forbidden
+blocked.com
+badsite.net
+
+
+
+# Wildcard blocking (Ensure your C++ code supports the * prefix)
+*.bad-analytics.org
+
+# IP based blocking
+192.0.2.5
+
+# NOTE: Do NOT block example.com or httpbin.org here, 
+# as they are used by the automated test scripts.
+example.com

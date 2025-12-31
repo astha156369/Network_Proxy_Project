@@ -1,0 +1,5 @@
+2025-12-31T07:34:00Z 127.0.0.1:58486 "CONNECT example.com:443 HTTP/1.1" example.com:443 BLOCKED 403 0
+2025-12-31T06:45:07Z 127.0.0.1:55006 "GET http://example.com/ HTTP/1.1" example.com:80 ERROR 502 0
+2025-12-31T06:44:32Z 127.0.0.1:55004 "HEAD http://httpbin.org/get HTTP/1.1" httpbin.org:80 FORWARD 200 225
+2025-12-31T06:44:10Z 127.0.0.1:55002 "GET http://httpbin.org/get HTTP/1.1" httpbin.org:80 FORWARD 200 480
+2025-12-30T18:35:08Z client "GET http://httpbin.org/get HTTP/1.1" httpbin.org FORWARD 200 478
