@@ -6,13 +6,13 @@ The proxy server implements a **thread pool-based forward proxy** architecture u
 
 ### Component Overview
 
-| Component | Responsibility | Thread Safety |
-|-----------|---------------|---------------|
-| **ProxyServer** | Main accept loop, connection queue management, request routing | Thread-safe queue with mutex/condition variable |
-| **FilterManager** | Domain/IP-based request filtering using blacklist rules | Thread-safe via mutex-protected internal state |
-| **Logger** | Persistent request logging to disk | Thread-safe via mutex-protected file handle |
-| **Metrics** | Real-time statistics (RPM, top domains) with sliding window | Lock-free atomic operations for counters, mutex for domain map |
-| **Admin Server** | Separate HTTP server on port 8889 for metrics/control API | Single-threaded accept loop |
+| Component         | Responsibility                                                 | Thread Safety                                                  |
+| ----------------- | -------------------------------------------------------------- | -------------------------------------------------------------- |
+| **ProxyServer**   | Main accept loop, connection queue management, request routing | Thread-safe queue with mutex/condition variable                |
+| **FilterManager** | Domain/IP-based request filtering using blacklist rules        | Thread-safe via mutex-protected internal state                 |
+| **Logger**        | Persistent request logging to disk                             | Thread-safe via mutex-protected file handle                    |
+| **Metrics**       | Real-time statistics (RPM, top domains) with sliding window    | Lock-free atomic operations for counters, mutex for domain map |
+| **Admin Server**  | Separate HTTP server on port 8889 for metrics/control API      | Single-threaded accept loop                                    |
 
 ### Architecture Diagram
 
@@ -21,24 +21,24 @@ graph TB
     Client[Client Connections] -->|TCP:8888| Listener[ProxyServer<br/>Accept Loop]
     Listener -->|Enqueue Socket| Queue[Job Queue<br/>std::queue&lt;SOCKET&gt;]
     Queue -->|Dequeue| Workers[Worker Thread Pool<br/>20 Threads]
-    
+
     Workers -->|Parse Request| Parser[HTTP Parser]
     Parser -->|Extract Host| Filter[FilterManager<br/>is_blocked]
     Filter -->|Block Decision| Decision{Blocked?}
-    
+
     Decision -->|Yes| Response403[403 Forbidden<br/>Close Connection]
     Decision -->|No| DNS[getaddrinfo<br/>DNS Resolution]
-    
+
     DNS -->|Connect| Target[Target Server]
     Target -->|HTTP| Forward[HTTP Forwarding<br/>Single Thread]
     Target -->|CONNECT| Tunnel[HTTPS Tunneling<br/>2 Threads Bidirectional]
-    
+
     Workers -->|Log Events| Logger[Logger<br/>proxy.log]
     Workers -->|Record Stats| Metrics[Metrics<br/>Sliding Window]
-    
+
     Metrics -->|JSON API| Admin[Admin Server<br/>Port 8889]
     Admin -->|GET /metrics| ClientAPI[Client Query]
-    
+
     style Listener fill:#e1f5ff
     style Workers fill:#fff4e1
     style Filter fill:#ffe1e1
@@ -48,6 +48,7 @@ graph TB
 ### Component Interactions
 
 **ProxyServer** acts as the orchestrator:
+
 - Maintains the listening socket on port 8888
 - Runs the main accept loop in the primary thread
 - Pushes accepted client sockets to `m_jobQueue`
@@ -55,17 +56,20 @@ graph TB
 - Each worker thread calls `handle_client()` for dequeued sockets
 
 **FilterManager** provides synchronous filtering:
+
 - Loads rules from `config/blocked_domains.txt` at startup
 - Supports exact matches, wildcard suffixes (`*.example.com`), and IP addresses
 - `is_blocked()` is called once per request before DNS resolution
 - Uses Pimpl pattern to hide internal `std::vector` storage
 
 **Logger** writes structured log entries:
+
 - Format: `ISO_TIMESTAMP CLIENT_IP:PORT "REQUEST_LINE" HOST:PORT ACTION STATUS BYTES`
 - Thread-safe via mutex around `std::ofstream`
 - Flushes after each write to ensure durability
 
 **Metrics** tracks aggregate statistics:
+
 - **RPM Calculation**: 60-second sliding window with atomic counters per second slot
 - Background thread advances the current slot every second, zeroing the next slot
 - Domain frequency tracking uses `std::unordered_map` protected by mutex
@@ -73,6 +77,7 @@ graph TB
 - `get_top_k()` requires mutex lock to sort domain counts
 
 **Admin Server** runs in a detached thread:
+
 - Listens on `127.0.0.1:8889` (loopback only)
 - Handles two endpoints:
   - `GET /metrics`: Returns JSON with RPM, bandwidth limit, and top 5 domains
@@ -91,6 +96,7 @@ The system uses a **hybrid thread pool model** combining a fixed worker pool wit
 3. **Queue-Based Backpressure**: When all workers are busy, new connections wait in the queue rather than spawning unbounded threads
 
 **Implementation Details**:
+
 - Main thread runs the accept loop (`ProxyServer::start()`)
 - Accepted sockets are pushed to `m_jobQueue` (protected by `m_queueMutex`)
 - 20 worker threads block on `m_condition.wait()` until a socket is available
@@ -98,16 +104,17 @@ The system uses a **hybrid thread pool model** combining a fixed worker pool wit
 
 **Trade-offs**:
 
-| Aspect | Thread Pool (Current) | Thread-per-Connection | Event Loop (IOCP/epoll) |
-|--------|----------------------|----------------------|-------------------------|
-| **Scalability** | Limited to 20 concurrent requests | Unlimited (until OS limit) | Very high (10K+ connections) |
-| **Latency** | Low (no thread creation overhead) | Higher (thread creation cost) | Lowest (no blocking) |
-| **Complexity** | Medium (queue management) | Low (simple spawn) | High (async state machines) |
-| **Resource Usage** | Predictable (fixed memory) | Unpredictable (grows with load) | Very efficient (low memory) |
-| **Blocking I/O** | Compatible | Compatible | Requires async I/O |
-| **Winsock Compatibility** | Native | Native | Requires IOCP (complex) |
+| Aspect                    | Thread Pool (Current)             | Thread-per-Connection           | Event Loop (IOCP/epoll)      |
+| ------------------------- | --------------------------------- | ------------------------------- | ---------------------------- |
+| **Scalability**           | Limited to 20 concurrent requests | Unlimited (until OS limit)      | Very high (10K+ connections) |
+| **Latency**               | Low (no thread creation overhead) | Higher (thread creation cost)   | Lowest (no blocking)         |
+| **Complexity**            | Medium (queue management)         | Low (simple spawn)              | High (async state machines)  |
+| **Resource Usage**        | Predictable (fixed memory)        | Unpredictable (grows with load) | Very efficient (low memory)  |
+| **Blocking I/O**          | Compatible                        | Compatible                      | Requires async I/O           |
+| **Winsock Compatibility** | Native                            | Native                          | Requires IOCP (complex)      |
 
 **Why Not Event Loop?**: While IOCP (Windows I/O Completion Ports) would provide superior scalability, it requires:
+
 - Complete rewrite to asynchronous I/O
 - Complex state machine management for partial reads/writes
 - More complex error handling
@@ -127,11 +134,13 @@ run_tunnel(clientSocket, serverSock, limit) {
 ```
 
 **Rationale**: Each `forward_loop()` blocks on `recv()`, so bidirectional forwarding requires two threads. This is necessary because:
+
 - The proxy cannot know which direction will have data first
 - Blocking on one direction would deadlock the other
 - This pattern is standard for TCP tunneling
 
 **Resource Impact**: Under full HTTPS load, the system can have:
+
 - 20 worker threads (from pool)
 - Up to 20 × 2 = 40 additional forwarding threads (if all 20 workers handle CONNECT simultaneously)
 - Total: ~60 threads maximum
@@ -140,14 +149,14 @@ This is acceptable for Windows (typical limit: 2000+ threads per process) but re
 
 ### Synchronization Primitives
 
-| Resource | Protection Mechanism | Rationale |
-|----------|---------------------|-----------|
-| `m_jobQueue` | `std::mutex` + `std::condition_variable` | Producer-consumer pattern: main thread enqueues, workers dequeue |
-| `FilterManager::pimpl` | `std::mutex` in Impl | Read operations (rule matching) are frequent; mutex prevents race on vector iteration |
-| `Logger::pimpl->ofs` | `std::mutex` | File I/O is not thread-safe; serialization ensures log integrity |
-| `Metrics::slots[]` | `std::atomic<uint64_t>` | Lock-free increments for RPM tracking (high-frequency operation) |
-| `Metrics::domain_counts` | `std::mutex` | Hash map updates require full lock (less frequent than slot increments) |
-| `m_maxBytesPerSec` | `std::atomic<size_t>` | Admin server updates bandwidth limit without blocking workers |
+| Resource                 | Protection Mechanism                     | Rationale                                                                             |
+| ------------------------ | ---------------------------------------- | ------------------------------------------------------------------------------------- |
+| `m_jobQueue`             | `std::mutex` + `std::condition_variable` | Producer-consumer pattern: main thread enqueues, workers dequeue                      |
+| `FilterManager::pimpl`   | `std::mutex` in Impl                     | Read operations (rule matching) are frequent; mutex prevents race on vector iteration |
+| `Logger::pimpl->ofs`     | `std::mutex`                             | File I/O is not thread-safe; serialization ensures log integrity                      |
+| `Metrics::slots[]`       | `std::atomic<uint64_t>`                  | Lock-free increments for RPM tracking (high-frequency operation)                      |
+| `Metrics::domain_counts` | `std::mutex`                             | Hash map updates require full lock (less frequent than slot increments)               |
+| `m_maxBytesPerSec`       | `std::atomic<size_t>`                    | Admin server updates bandwidth limit without blocking workers                         |
 
 ## Data Flow
 
@@ -205,32 +214,35 @@ This is acceptable for Windows (typical limit: 2000+ threads per process) but re
 **Path A: HTTP Request (Non-CONNECT)**
 
 6a. **HTTP Forwarding**:
-   - Reconstructs HTTP request:
-     - Preserves original `METHOD TARGET VERSION`
-     - Forwards all headers except `Connection` and `Proxy-Connection`
-     - Adds `Connection: close`
-   - Sends reconstructed request to target server via `send_all()`
-   - Enters receive loop:
-     - `recv(serverSock)` into 8KB buffer
-     - `send_all(clientSocket)` to forward data
-     - Applies bandwidth throttling if `m_maxBytesPerSec > 0`:
-       - Calculates expected transmission time
-       - Sleeps if transmission is ahead of schedule
-     - Breaks on `recv() <= 0` or `send_all()` failure
-   - Logs final request with total bytes transferred
-   - Calls `graceful_close()` on both sockets
+
+- Reconstructs HTTP request:
+  - Preserves original `METHOD TARGET VERSION`
+  - Forwards all headers except `Connection` and `Proxy-Connection`
+  - Adds `Connection: close`
+- Sends reconstructed request to target server via `send_all()`
+- Enters receive loop:
+  - `recv(serverSock)` into 8KB buffer
+  - `send_all(clientSocket)` to forward data
+  - Applies bandwidth throttling if `m_maxBytesPerSec > 0`:
+    - Calculates expected transmission time
+    - Sleeps if transmission is ahead of schedule
+  - Breaks on `recv() <= 0` or `send_all()` failure
+- Logs final request with total bytes transferred
+- Calls `graceful_close()` on both sockets
 
 **Path B: HTTPS Tunneling (CONNECT)**
 
 6b. **CONNECT Tunneling**:
-   - Sends `HTTP/1.1 200 Connection Established\r\n\r\n` to client
-   - Calls `run_tunnel(clientSocket, serverSock, limit)`:
-     - Spawns thread T1: `forward_loop(client → server)`
-     - Spawns thread T2: `forward_loop(server → client)`
-     - Joins both threads (waits for either direction to close)
-     - Calls `graceful_close()` on both sockets
+
+- Sends `HTTP/1.1 200 Connection Established\r\n\r\n` to client
+- Calls `run_tunnel(clientSocket, serverSock, limit)`:
+  - Spawns thread T1: `forward_loop(client → server)`
+  - Spawns thread T2: `forward_loop(server → client)`
+  - Joins both threads (waits for either direction to close)
+  - Calls `graceful_close()` on both sockets
 
 **`forward_loop()` Implementation**:
+
 - Reads from source socket in 8KB chunks
 - Writes to destination socket via `send_all()`
 - Applies bandwidth throttling (same algorithm as HTTP path)
@@ -239,20 +251,21 @@ This is acceptable for Windows (typical limit: 2000+ threads per process) but re
 
 ### Error Handling Points
 
-| Error Condition | Handling Strategy | Result |
-|----------------|------------------|--------|
-| `accept()` fails | Continue loop (non-fatal) | Connection dropped silently |
-| `recv()` timeout (10s) | Close socket, return | Client receives connection reset |
-| Request size > 64KB | Close socket, return | Prevents memory exhaustion |
-| Empty host | Log 400, close | Client receives connection reset |
-| DNS resolution fails | Log 502, close | Client receives connection reset |
-| `connect()` fails | Log 502, close both sockets | Client receives connection reset |
-| `send_all()` fails | Break forwarding loop | Partial data may be sent |
-| `recv()` returns 0 | Break forwarding loop | Normal connection close |
+| Error Condition        | Handling Strategy           | Result                           |
+| ---------------------- | --------------------------- | -------------------------------- |
+| `accept()` fails       | Continue loop (non-fatal)   | Connection dropped silently      |
+| `recv()` timeout (10s) | Close socket, return        | Client receives connection reset |
+| Request size > 64KB    | Close socket, return        | Prevents memory exhaustion       |
+| Empty host             | Log 400, close              | Client receives connection reset |
+| DNS resolution fails   | Log 502, close              | Client receives connection reset |
+| `connect()` fails      | Log 502, close both sockets | Client receives connection reset |
+| `send_all()` fails     | Break forwarding loop       | Partial data may be sent         |
+| `recv()` returns 0     | Break forwarding loop       | Normal connection close          |
 
 ### Graceful Shutdown
 
 The `graceful_close()` function implements TCP connection teardown:
+
 1. Sets `SO_LINGER` with 1-second timeout
 2. Calls `shutdown(socket, SD_SEND)` to signal no more writes
 3. Drains remaining data with `recv()` loop
@@ -265,17 +278,20 @@ This ensures the OS sends a proper FIN packet and flushes buffered data before c
 ### Error Handling Strategies
 
 **Defensive Programming**:
+
 - All socket operations check return values
 - Timeouts prevent indefinite blocking (10 seconds on receive operations)
 - Request size limits prevent memory exhaustion (64KB header limit)
 - DNS and connection failures are logged but don't crash the server
 
 **Error Recovery**:
+
 - Accept loop continues on `accept()` failure (handles EINTR-equivalent on Windows)
 - Worker threads return to queue on any error (don't propagate exceptions)
 - Admin server errors are logged but don't affect main proxy operation
 
 **Limitations**:
+
 - **No retry logic**: DNS/connection failures are immediately returned to client
 - **No circuit breaker**: Repeated failures to the same host don't trigger backoff
 - **Synchronous DNS**: `getaddrinfo()` blocks the worker thread (can be slow for misconfigured DNS)
@@ -285,16 +301,19 @@ This ensures the OS sends a proper FIN packet and flushes buffered data before c
 #### Scalability Bottlenecks
 
 1. **Fixed Thread Pool Size (20 workers)**:
+
    - **Impact**: Maximum 20 concurrent requests
    - **Mitigation**: Increase pool size in `ProxyServer::start()` (line 201)
    - **Trade-off**: More threads = more memory, but better concurrency
 
 2. **Synchronous DNS Resolution**:
+
    - **Impact**: Each `getaddrinfo()` call blocks a worker thread (typically 10-100ms, can be seconds on network issues)
    - **Mitigation**: Implement async DNS using a separate thread pool or library (e.g., c-ares)
    - **Current Workaround**: 10-second timeout prevents indefinite blocking
 
 3. **Thread Per CONNECT Direction**:
+
    - **Impact**: Up to 40 additional threads under full HTTPS load
    - **Mitigation**: Use IOCP for true async I/O (major refactor)
    - **Current Workaround**: Acceptable for moderate traffic (<1000 concurrent connections)
@@ -327,11 +346,13 @@ This ensures the OS sends a proper FIN packet and flushes buffered data before c
 **Implementation**: `FilterManager` maintains a blacklist loaded from `config/blocked_domains.txt`
 
 **Capabilities**:
+
 - Exact domain matching: `example.com`
 - Wildcard suffix matching: `*.example.com` (matches `sub.example.com`, `a.b.example.com`)
 - IP address matching: `192.0.2.5`
 
 **Limitations**:
+
 - **No regex support**: Wildcards only support `*.` prefix pattern
 - **Case-sensitive after lowercasing**: All comparisons are case-insensitive
 - **No time-based rules**: Blocking is permanent until config reload
@@ -344,6 +365,7 @@ This ensures the OS sends a proper FIN packet and flushes buffered data before c
 - **Header Parsing**: Simple `:` delimiter splitting (does not handle malformed headers robustly)
 
 **Vulnerabilities**:
+
 - **Header Injection**: No validation of header values (could inject `\r\n` sequences)
 - **Path Traversal**: No validation of `TARGET` in HTTP requests (could request `../../../etc/passwd`)
 - **Host Header Injection**: No validation that `Host:` header matches the actual target
@@ -351,11 +373,13 @@ This ensures the OS sends a proper FIN packet and flushes buffered data before c
 #### Rate Limiting
 
 **Bandwidth Throttling**:
+
 - Configurable via admin API: `GET /speed=N` sets `m_maxBytesPerSec`
 - Applied per-connection using sleep-based rate limiting
 - **Limitation**: Sleep-based throttling is imprecise and consumes CPU cycles
 
 **No Request Rate Limiting**:
+
 - No limit on requests per second from a single client
 - No limit on concurrent connections from a single IP
 - **Risk**: Single client could exhaust thread pool
@@ -377,7 +401,3 @@ This ensures the OS sends a proper FIN packet and flushes buffered data before c
 6. **Implement Log Rotation**: Prevent disk exhaustion from unbounded log growth
 7. **Add Health Checks**: Admin endpoint to verify proxy is responsive
 8. **Consider IOCP Migration**: For high-scale deployments (>1000 concurrent connections)
-
----
-
-**Last Updated**: Based on codebase analysis as of current implementation.

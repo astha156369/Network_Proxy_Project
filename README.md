@@ -130,17 +130,37 @@ The proxy will return a `403 Forbidden` response for blocked domains.
 
 ## Usage Examples
 
-### Basic HTTP Request
+### Basic HTTP Request (Valid Connection)
+
+```powershell
+curl.exe -x 127.0.0.1:8888 http://httpbin.org/get
+```
+
+This demonstrates a successful HTTP request through the proxy. The proxy forwards the request to httpbin.org and returns the response.
+
+### Blocked Site (Forbidden Response)
 
 ```powershell
 curl.exe -x localhost:8888 http://example.com
 ```
 
-### HTTPS Request (via CONNECT)
+If `example.com` is in the blocked domains list, the proxy will return a `403 Forbidden` response without forwarding the request.
+
+### Invalid Domain (Error Handling)
 
 ```powershell
-curl.exe -x localhost:8888 https://example.com
+curl.exe -v -x 127.0.0.1:8888 http://nonexistent123456789.com
 ```
+
+This demonstrates error handling when DNS resolution fails. The `-v` flag shows verbose connection details including the error.
+
+### HTTPS Request (via CONNECT Tunneling)
+
+```powershell
+curl -x http://127.0.0.1:8888 https://www.google.com
+```
+
+This demonstrates HTTPS tunneling using the HTTP CONNECT method. The proxy establishes a TCP tunnel between the client and the target server for encrypted traffic.
 
 ### Check Proxy Metrics
 
@@ -268,6 +288,7 @@ proxy-project/
 
 - **[Design Document](docs/design.md)**: Detailed architecture and component overview
 - **[Demo Guide](docs/demo.md)**: Visual examples and verification steps
+- **[Screenshots Documentation](docs/screenshots.md)**: Visual documentation of proxy server scenarios and use cases
 
 ### Troubleshooting
 
