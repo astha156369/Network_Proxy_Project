@@ -254,32 +254,53 @@ Or run individual test scripts:
 
 ```
 proxy-project/
-├── include/              # Header files
-│   ├── proxy_server.h   # Main proxy server class
-│   ├── filter_manager.h # Domain filtering logic
-│   ├── logger.h         # Logging functionality
-│   ├── metrics.h        # Metrics tracking
-│   └── thread_pool.h    # Thread pool implementation
-├── src/                 # Source files
-│   ├── main.cpp         # Entry point
-│   ├── proxy_server.cpp # Core proxy logic
+├── include/                   # Header files
+│   ├── filter_manager.h       # Domain filtering logic
+│   ├── logger.h               # Logging functionality
+│   ├── metrics.h              # Metrics tracking
+│   ├── proxy_server.h         # Main proxy server class
+│   └── thread_pool.h          # Thread pool implementation
+├── src/                       # Source files
 │   ├── filter_manager.cpp
 │   ├── logger.cpp
+│   ├── main.cpp               # Entry point
 │   ├── metrics.cpp
+│   ├── proxy_server.cpp       # Core proxy logic
 │   └── thread_pool.cpp
-├── config/              # Configuration files
-│   ├── server.conf      # Server configuration
-│   └── blocked_domains.txt  # Domain blacklist
-├── tests/               # Test scripts
+├── config/                    # Configuration files
+│   ├── blocked_domains.txt    # Domain blacklist
+│   └── server.conf            # Server configuration
+├── tests/                     # Test scripts and test data
 │   ├── basic_tests.ps1
+│   ├── collect_sample_log.ps1
 │   ├── connect_tests.ps1
-│   └── concurrency_test.ps1
-├── docs/                # Documentation
-│   ├── design.md        # Architecture documentation
-│   └── demo.md          # Usage demonstrations
-├── logs/                # Log files (generated at runtime)
-├── Makefile             # Build configuration
-└── README.md            # This file
+│   ├── concurrency_test.ps1
+│   ├── test_blocked.bat
+│   ├── test_concurrent.bat
+│   └── logs/                  # Test logs produced by scripts
+│       ├── connect_allowed.txt
+│       └── connect_blocked.txt
+├── docs/                      # Documentation and assets
+│   ├── design.md              # Architecture documentation
+│   ├── demo.md                # Usage demonstrations
+│   ├── screenshots.md         # Screenshot-based walkthroughs
+│   ├── proxy_log_sample.txt
+│   ├── 1.png
+│   ├── 2.png
+│   ├── 3.png
+│   ├── 4.png
+│   ├── 5.png
+│   ├── 6.png
+│   └── Demo_video.mp4
+├── logs/                      # Runtime logs (generated at runtime)
+│   ├── proxy.log
+│   └── ...                    # Other sample / test log outputs
+├── build-and-test.ps1         # Convenience script to build and run tests
+├── package.ps1                # Packaging script
+├── Makefile                   # Build configuration for make
+├── proxy.exe                  # Built proxy server (binary)
+├── test.exe                   # Test binary
+└── README.md                  # This file
 ```
 
 ## Getting Help
