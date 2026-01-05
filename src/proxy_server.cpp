@@ -1,4 +1,3 @@
-// src/proxy_server.cpp
 #include "proxy_server.h"
 #include <iostream>
 #include <string>
@@ -52,7 +51,6 @@ static bool send_all(SOCKET sock, const char *data, size_t length)
     return true;
 }
 
-/** Graceful close with linger to flush data before closing */
 static void graceful_close(SOCKET s)
 {
     if (s == INVALID_SOCKET)
@@ -120,7 +118,6 @@ static FilterManager filterManager;
 static Logger logger;
 static Metrics metrics;
 
-// Helper: unified per-request logging (file + concise console output)
 static void log_request(const std::string &client_desc,
                         const std::string &dest,
                         const std::string &reqline,
@@ -128,10 +125,9 @@ static void log_request(const std::string &client_desc,
                         int status,
                         size_t bytes)
 {
-    // write to persistent logger
+
     logger.log(client_desc, dest, reqline, action, status, bytes);
 
-    // concise console line for per-request visibility
     std::ostringstream oss;
     oss << "[REQ] " << client_desc << " -> " << dest << " \"" << reqline << "\" " << action << " " << status << " bytes=" << bytes;
     std::cout << oss.str() << std::endl;
@@ -201,7 +197,6 @@ void ProxyServer::start()
     for (int i = 0; i < 20; ++i)
         m_workers.emplace_back(&ProxyServer::worker_thread, this);
 
-    // admin thread for /metrics (unchanged)
     std::thread([this]()
                 {
         SOCKET admin = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -258,7 +253,6 @@ void ProxyServer::start()
         closesocket(admin); })
         .detach();
 
-    // Accept loop: push accepted sockets to worker queue (no per-connection console prints)
     while (m_isRunning)
     {
         sockaddr_storage clientAddrStorage{};
@@ -266,7 +260,7 @@ void ProxyServer::start()
         SOCKET client = accept(m_listenSocket, reinterpret_cast<sockaddr *>(&clientAddrStorage), &clientSize);
         if (client == INVALID_SOCKET)
         {
-            // accept failed or interrupted; continue loop
+
             continue;
         }
 
@@ -280,7 +274,7 @@ void ProxyServer::start()
 
 void ProxyServer::handle_client(SOCKET clientSocket)
 {
-    // Build client description string once per connection (used for all request logs)
+
     std::string client_desc = "unknown";
     {
         sockaddr_storage peer{};
@@ -369,7 +363,6 @@ void ProxyServer::handle_client(SOCKET clientSocket)
         }
     }
 
-    // If host is empty treat as malformed request
     if (host.empty())
     {
         logger.log(client_desc, "", reqLine, "ERROR", 400, 0);
@@ -379,7 +372,6 @@ void ProxyServer::handle_client(SOCKET clientSocket)
 
     metrics.record_request(host);
 
-    // Apply filter per request
     if (filterManager.is_blocked(host))
     {
         std::string res = "HTTP/1.1 403 Forbidden\r\nContent-Length: 9\r\nConnection: close\r\n\r\nForbidden";
@@ -394,7 +386,7 @@ void ProxyServer::handle_client(SOCKET clientSocket)
     hints.ai_socktype = SOCK_STREAM;
     if (getaddrinfo(host.c_str(), port.c_str(), &hints, &res) != 0)
     {
-        // DNS resolution failed -> record request-level error
+
         log_request(client_desc, host + ":" + port, reqLine, "ERROR", 502, 0);
         graceful_close(clientSocket);
         return;
@@ -415,7 +407,7 @@ void ProxyServer::handle_client(SOCKET clientSocket)
     size_t limit = m_maxBytesPerSec.load();
     if (method == "CONNECT")
     {
-        // Log the CONNECT request as a request-level FORWARD (200)
+
         log_request(client_desc, host + ":" + port, reqLine, "FORWARD", 200, 0);
 
         std::string ok = "HTTP/1.1 200 Connection Established\r\n\r\n";
@@ -425,7 +417,7 @@ void ProxyServer::handle_client(SOCKET clientSocket)
     else
     {
         std::ostringstream reqOut;
-        // If client sent absolute URI as target, preserve path portion; if not, use target as-is.
+
         reqOut << method << " " << target << " " << version << "\r\n";
         for (auto const &kv : headers)
         {
@@ -457,7 +449,7 @@ void ProxyServer::handle_client(SOCKET clientSocket)
                     std::this_thread::sleep_for(std::chrono::milliseconds((int)(exp - elap)));
             }
         }
-        // Request-level final log
+
         log_request(client_desc, host + ":" + port, reqLine, "FORWARD", 200, total);
         graceful_close(serverSock);
         graceful_close(clientSocket);
